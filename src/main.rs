@@ -169,6 +169,33 @@ fn main() {
         .version("0.0.1")
         .author("Freddie Brown")
         .about("Command Line PM Board")
+        .arg(Arg::with_name("list")
+            .short("l")
+            .long("list")
+            .help("List Current Board"))
+        .arg(Arg::with_name("add_column")
+            .help("Add Column to Board")
+            .long("add_column")
+            .takes_value(true))
+        .arg(Arg::with_name("remove_column")
+            .help("Remove Column From Board")
+            .long("remove_column")
+            .takes_value(true))
+        .arg(Arg::with_name("edit_item")
+            .long("edit_item")
+            .help("Edit Item Data"))
+        .arg(Arg::with_name("add_item")
+            .long("add_item")
+            .help("Add Item to Column")
+            .takes_value(true))
+        .arg(Arg::with_name("remove_item")
+            .long("remove_item")
+            .help("Remove Item From Column")
+            .takes_value(true))
+        .arg(Arg::with_name("move_item")
+            .long("move_item")
+            .help("Move Item To Different Column")
+            .takes_value(true))
         .get_matches();
     let mut config_toml = String::from("");
     let file_path = "board.toml";
@@ -182,23 +209,49 @@ fn main() {
         .unwrap_or_else(|err| panic!("Error while reading config: [{}]", err));
 
     let mut config: Board = toml::from_str(&config_toml).unwrap();
-    config.create_column(String::from("Test"));
-    config.create_item(String::from("TestItemTitle1"), String::from("TestItemBody1"), String::from("Test"));
-    config.create_item(String::from("TestItemTitle2"), String::from("TestItemBody2"), String::from("Test"));
-
-    println!("{}", config.to_string());
-
-    config.move_item(config.counter-1, String::from("ToDo"));
-
-    println!("{}", config.to_string());
-
-    config.remove_item(config.counter-1);
-
-    println!("{}", config.to_string());
-
-    config.remove_column(String::from("Test"));
     
+    if matches.is_present("list"){
+        println!("{}", config.to_string());
+    }
 
+    if matches.is_present("add_column"){
+        match matches.value_of("add_column"){
+            Some(name) => config.create_column(String::from(name)),
+            None => ()
+        };
+
+        println!("Column Added!");
+    }
+
+    if matches.is_present("remove_column"){
+        match matches.value_of("remove_column"){
+            Some(name) => config.remove_column(String::from(name)),
+            None => ()
+        };
+
+        println!("Column Removed!");
+    }
+
+    if matches.is_present("add_item"){
+        println!("Adding Item")
+    }
+
+    if matches.is_present("remove_item"){
+        match matches.value_of("remove_item"){
+            Some(id) => config.remove_item(id.parse::<u16>().unwrap()),
+            None => ()
+        };
+
+        println!("Item Removed!")
+    }
+
+    if matches.is_present("move_item"){
+        println!("Moving Item")
+    }
+
+    if matches.is_present("edit_item"){
+        println!("Editing Item")
+    }
     close(&config, file_path);
 }
 
