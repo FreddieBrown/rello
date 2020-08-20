@@ -1,184 +1,7 @@
-#![allow(dead_code)]
-use std::{fs::File, io::prelude::*, fmt};
-use std::io::{stdin,stdout,Write};
+#![allow(dead_code, irrefutable_let_patterns)]
 use clap::{Arg, App};
-use serde::Deserialize;
-use serde::Serialize;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Board {
-    counter: u16,
-    columns: Vec<Column>
-}
-
-impl Board {
-    pub fn new() -> Board{
-        Board{counter: 0, columns: vec![]}
-    }
-
-    pub fn create_column(&mut self, title: String) {
-        self.columns.push(Column::new(title));
-    }
-    
-    pub fn remove_column(&mut self, title: String) {
-        for i in 0..self.columns.len(){
-            if self.columns[i].title == title {
-                self.columns.remove(i);
-                return
-            }
-        }
-    }
-
-    pub fn create_item(&mut self, item_title: String, item_body: String, col_title: String) {
-        for col in self.columns.iter_mut(){
-            if col.title == col_title {
-                col.items.push(Item::new(self.counter, item_title, item_body));
-                self.counter += 1;
-                return
-            }
-        }
-    }
-    
-    pub fn remove_item(&mut self, id: u16) {
-        for col in self.columns.iter_mut(){
-            for i in 0..col.items.len() {
-                if col.items[i].id == id {
-                    col.items.remove(i);
-                    return
-                }
-            }
-        }
-    }
-
-    pub fn edit_item_title(&mut self, id: u16, title: String){
-        for col in self.columns.iter_mut(){
-            for itm in col.items.iter_mut() {
-                if itm.id == id {
-                    itm.title = title;
-                    return
-                }
-            }
-        }
-    }
-
-    pub fn edit_item_body(&mut self, id: u16, body: String){
-        for col in self.columns.iter_mut(){
-            for itm in col.items.iter_mut() {
-                if itm.id == id {
-                    itm.body = body;
-                    return
-                }
-            }
-        }
-    }
-    
-    pub fn move_item(&mut self, id: u16, col_title: String){
-        let mut target_col: Option<&mut Column> = None;
-        let mut target_itm: Option<Item> = None;
-        for col in self.columns.iter_mut() {
-            if col.title == col_title {
-                target_col = Some(col);
-                continue
-            }
-            for i in 0..col.items.len() {
-                if col.items[i].id == id {
-                    target_itm = Some(col.items.remove(i));
-                    continue
-                }
-            }
-        }
-
-        match target_col{
-            Some(col) => match target_itm {
-                Some(itm) => col.items.push(itm),
-                None => println!("That item doesn't exist")
-            },
-            None => println!("That column doesn't exist"),
-        }
-    }
-
-    fn column_exists(&self, title: String) -> bool {
-
-        for col in self.columns.iter() {
-            if col.title == title {
-                return true
-            }
-        }
-        false
-    }
-
-    fn item_exists(&self, id: u16) -> Option<&String> {
-        for col in self.columns.iter() {
-            for itm in col.items.iter() {
-                if itm.id == id {
-                    return Some(&col.title)
-                }
-            }
-        }
-        None
-    }
-
-    fn read_text(question: String) -> String {
-        let mut s=String::new();
-        print!("{}: ", question);
-        let _=stdout().flush();
-        stdin().read_line(&mut s).expect("Did not enter a correct string");
-        if let Some('\n')=s.chars().next_back() {
-            s.pop();
-        }
-        if let Some('\r')=s.chars().next_back() {
-            s.pop();
-        }
-        s
-    }
-
-
-}
-
-impl fmt::Display for Board {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let whole: Vec<_> = self.columns.iter().map(|x| x.to_string()).collect();
-        write!(f, "Board: \n\t{}", whole.join("\n\t"))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Column {
-    title: String,
-    items: Vec<Item>
-}
-
-impl Column {
-    pub fn new(title: String) -> Column {
-        Column{title, items: vec![]}
-    }
-}
-
-impl fmt::Display for Column {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let whole: Vec<_> = self.items.iter().map(|x| x.to_string()).collect();
-        write!(f, "{}: \n\t\t{}", self.title, whole.join("\n\t\t"))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Item {
-    id: u16,
-    title: String,
-    body: String
-}
-
-impl Item {
-    pub fn new(id: u16, title: String, body: String) -> Item {
-        Item{id: id, title, body}
-    }
-}
-
-impl fmt::Display for Item {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "(ID: {}) Title: {}, Body: {}", self.id, self.title, self.body)
-    }
-}
+mod board;
+use board::*;
 
 fn main() {
     let matches = App::new("Rello")
@@ -211,20 +34,117 @@ fn main() {
         .arg(Arg::with_name("move_item")
             .long("move_item")
             .help("Move Item To Different Column"))
+        .arg(Arg::with_name("shell")
+            .long("shell")
+            .short("s")
+            .help("Interactive shell allowing multiple interactions with board"))
         .get_matches();
-    let mut config_toml = String::from("");
     let file_path = "./board.toml";
-    let mut file = match File::open(&file_path) {
-        Ok(file) => file,
-        Err(_) => {
-            File::create(&file_path).expect("Cannot create new file")
-        }
-    };
-    file.read_to_string(&mut config_toml)
-        .unwrap_or_else(|err| panic!("Error while reading config: [{}]", err));
 
-    let mut board: Board = toml::from_str(&config_toml).unwrap();
+
+    let mut board: Board = match std::fs::read_to_string(file_path){
+        Ok(s) => match toml::from_str(&s) {
+            Ok(b) => b,
+            Err(_) => Board::new(),
+        },
+        Err(_) => Board::new(),
+    };
+
+    if matches.is_present("shell"){
+        println!("SHELL");
+        shell(&mut board);
+    }
+    else{
+        process_info(&matches, &mut board);
+    }
+
+    close(&board, file_path);
+}
+
+fn shell(board: &mut Board) {
+
+    while let input = Board::read_text(String::from("rello")) {
+        let ci_input = input.split(" ").collect::<Vec<&str>>();
+        if ci_input[0] == "exit" {
+            return
+        }
+
+        if ci_input[0] == "list"{
+            println!("{}", board.to_string());
+        }
     
+        if ci_input[0] == "add_column"{
+            if ci_input.len() > 1 {
+                board.create_column(String::from(ci_input[1]));
+            }
+    
+            println!("Column Added!");
+        }
+    
+        if ci_input[0] == "remove_column"{
+
+            if ci_input.len() > 1 {
+                board.remove_column(String::from(ci_input[1]))
+            }
+    
+            println!("Column Removed!");
+        }
+    
+        if ci_input[0] == "add_item"{
+    
+            let title = Board::read_text(String::from("Enter Title"));
+            let body = Board::read_text(String::from("Enter Body"));
+            let assignee = Board::read_text(String::from("Enter Assignee (Press Enter if none)"));
+            let col_title = Board::read_text(String::from("Enter Column"));
+    
+            match &assignee[..] {
+                "" => board.create_item(title, body, None, col_title),
+                _ => board.create_item(title, body, Some(assignee), col_title)
+            };
+            println!("Item Added!");
+        }
+    
+        if ci_input[0] == "remove_item"{
+
+            if ci_input.len() > 1 {
+                board.remove_item(ci_input[1].parse::<u16>().unwrap());
+            }
+    
+            println!("Item Removed!")
+        }
+    
+        if ci_input[0] ==  "move_item"{
+            let id = Board::read_text(String::from("Enter Item Id")).parse::<u16>().unwrap();
+            let col_title = Board::read_text(String::from("Enter Column"));
+            board.move_item(id, col_title);
+            println!("Moved Item")
+        }
+    
+        if ci_input[0] == "edit_item"{
+            let blank = String::from("");
+            let title = Board::read_text(String::from("New Title (Press Enter If No Change)"));
+            if title != blank{
+                board.edit_item_title(ci_input[1].parse::<u16>().unwrap(), title);
+            }
+            else {
+                println!("Blank Title")
+            }
+            let body = Board::read_text(String::from("New Body (Press Enter If No Change)"));
+            if body != blank{
+                board.edit_item_body(ci_input[1].parse::<u16>().unwrap(), body);
+            }
+            else {
+                println!("Blank Body")
+            }
+    
+            println!("Item Edited!");
+        }
+    }
+
+    println!("Shell Closed");
+}
+
+fn process_info(matches: &clap::ArgMatches, board: &mut Board) {
     if matches.is_present("list"){
         println!("{}", board.to_string());
     }
@@ -251,9 +171,13 @@ fn main() {
 
         let title = Board::read_text(String::from("Enter Title"));
         let body = Board::read_text(String::from("Enter Body"));
+        let assignee = Board::read_text(String::from("Enter Assignee (Press Enter if none)"));
         let col_title = Board::read_text(String::from("Enter Column"));
 
-        board.create_item(title, body, col_title);
+        match &assignee[..] {
+            "" => board.create_item(title, body, None, col_title),
+            _ => board.create_item(title, body, Some(assignee), col_title)
+        };
         println!("Item Added!");
     }
 
@@ -292,7 +216,6 @@ fn main() {
 
         println!("Item Edited!");
     }
-    close(&board, file_path);
 }
 
 fn close(board: &Board, file: &str) {
